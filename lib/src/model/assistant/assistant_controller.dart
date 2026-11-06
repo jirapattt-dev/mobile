@@ -11,10 +11,9 @@ import 'package:lichess_mobile/src/model/engine/engine.dart';
 import 'package:lichess_mobile/src/model/engine/engine_providers.dart';
 import 'package:lichess_mobile/src/model/engine/engine_spec.dart';
 
-/// Provides the current set of engine arrows for the active game position.
 final assistantControllerProvider =
-    StateNotifierProvider.autoDispose<AssistantController, AssistantState>(
-  (ref) => AssistantController(ref),
+    NotifierProvider.autoDispose<AssistantController, AssistantState>(
+  AssistantController.new,
 );
 
 class AssistantState {
@@ -41,26 +40,26 @@ class AssistantState {
   }
 }
 
-class AssistantController extends StateNotifier<AssistantState> {
-  AssistantController(this._ref) : super(const AssistantState()) {
-    _prefsSub = _ref.listen(assistantPreferencesProvider, (_, __) {
-      _restartSearch();
-    });
-  }
-
-  final Ref _ref;
-  late final ProviderSubscription<AssistantPreferences> _prefsSub;
-
+class AssistantController extends AutoDisposeNotifier<AssistantState> {
   Position? _currentPosition;
   Side? _userSide;
   Search? _currentSearch;
   StreamSubscription<UciInfo>? _infoSub;
   Timer? _autoPlayTimer;
 
-  /// Optional callback used by live games to actually play the move.
   void Function(Move)? onAutoPlay;
 
-  /// Call this from the game / analysis screen whenever the position or side-to-move changes.
+  @override
+  AssistantState build() {
+    ref.listen(assistantPreferencesProvider, (_, __) => _restartSearch());
+    ref.onDispose(() {
+      _currentSearch?.stop();
+      _infoSub?.cancel();
+      _autoPlayTimer?.cancel();
+    });
+    return const AssistantState();
+  }
+
   void updatePosition({
     required Position position,
     required Side userSide,
@@ -77,7 +76,7 @@ class AssistantController extends StateNotifier<AssistantState> {
     _autoPlayTimer?.cancel();
     state = const AssistantState();
 
-    final prefs = _ref.read(assistantPreferencesProvider);
+    final prefs = ref.read(assistantPreferencesProvider);
     final pos = _currentPosition;
     final side = _userSide;
 
@@ -86,9 +85,9 @@ class AssistantController extends StateNotifier<AssistantState> {
 
     try {
       final spec = prefs.useMaia ? const Lc0Spec() : const StockfishSpec.light();
-      final engine = await _ref.read(engineProvider(spec).future);
+      final engine = await ref.read(engineProvider(spec).future);
 
-      if (!_ref.mounted) return;
+      if (!ref.mounted) return;
 
       _currentSearch = engine.search(
         SearchRequest(
@@ -111,7 +110,7 @@ class AssistantController extends StateNotifier<AssistantState> {
     final shapes = <Shape>{};
     Move? best;
 
-    final count = _ref.read(assistantPreferencesProvider).arrowCount;
+    final count = ref.read(assistantPreferencesProvider).arrowCount;
     for (final uci in info.pv.take(count)) {
       final move = Move.fromUci(uci);
       if (move is NormalMove) {
@@ -130,21 +129,22 @@ class AssistantController extends StateNotifier<AssistantState> {
         ? (info.mate! > 0 ? 10.0 : -10.0)
         : (info.cp ?? 0) / 100.0;
 
-    state = state.copyWith(
+    final next = state.copyWith(
       shapes: shapes,
       bestMove: best,
       eval: eval,
     );
+    state = next;
 
-    // Auto-play with jitter once we have a best move
-    final prefs = _ref.read(assistantPreferencesProvider);
+    final prefs = ref.read(assistantPreferencesProvider);
     if (prefs.autoPlay && best != null && onAutoPlay != null) {
       _autoPlayTimer?.cancel();
-      final jitter = Random().nextDouble() * 0.4; // ±0.2s
+      final jitter = Random().nextDouble() * 0.4;
       final delay = prefs.autoPlayDelay + jitter;
+      final moveToPlay = best;
       _autoPlayTimer = Timer(Duration(milliseconds: (delay * 1000).round()), () {
-        if (state.bestMove != null && onAutoPlay != null) {
-          onAutoPlay!(state.bestMove!);
+        if (state.bestMove == moveToPlay && onAutoPlay != null) {
+          onAutoPlay!(moveToPlay);
         }
       });
     }
@@ -158,14 +158,5 @@ class AssistantController extends StateNotifier<AssistantState> {
     if (elo >= 1200) return 8;
     if (elo >= 800) return 6;
     return 4;
-  }
-
-  @override
-  void dispose() {
-    _currentSearch?.stop();
-    _infoSub?.cancel();
-    _autoPlayTimer?.cancel();
-    _prefsSub.close();
-    super.dispose();
   }
 }
