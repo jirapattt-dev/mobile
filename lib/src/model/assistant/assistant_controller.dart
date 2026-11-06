@@ -4,14 +4,13 @@ import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lichess_mobile/src/model/assistant/assistant_preferences.dart';
 import 'package:lichess_mobile/src/model/common/chess.dart';
 import 'package:lichess_mobile/src/model/engine/engine.dart';
-import 'package:lichess_mobile/src/model/assistant/assistant_preferences.dart';
+import 'package:lichess_mobile/src/model/engine/engine_providers.dart';
+import 'package:lichess_mobile/src/model/engine/engine_spec.dart';
 
 /// Provides the current set of engine arrows for the active game position.
-///
-/// In a real integration you will feed this controller the current position
-/// and side-to-move from the game screen / controller.
 final assistantControllerProvider =
     StateNotifierProvider.autoDispose<AssistantController, AssistantState>(
   (ref) => AssistantController(ref),
@@ -56,7 +55,7 @@ class AssistantController extends StateNotifier<AssistantState> {
   Search? _currentSearch;
   StreamSubscription<UciInfo>? _infoSub;
 
-  /// Call this from the game screen whenever the position or side-to-move changes.
+  /// Call this from the game / analysis screen whenever the position or side-to-move changes.
   void updatePosition({
     required Position position,
     required Side userSide,
@@ -67,7 +66,7 @@ class AssistantController extends StateNotifier<AssistantState> {
     _restartSearch();
   }
 
-  void _restartSearch() {
+  Future<void> _restartSearch() async {
     _currentSearch?.stop();
     _infoSub?.cancel();
     state = const AssistantState();
@@ -77,39 +76,60 @@ class AssistantController extends StateNotifier<AssistantState> {
     final side = _userSide;
 
     if (!prefs.enabled || pos == null || side == null) return;
-    if (pos.turn != side) return; // only suggest on user's turn
+    if (pos.turn != side) return;
 
-    // TODO: obtain a shared Engine instance from the app's engine pool.
-    // For the skeleton we leave the actual Engine construction as a comment.
-    //
-    // final engine = _ref.read(engineProvider);
-    //
-    // _currentSearch = engine.search(SearchRequest(
-    //   initialPosition: pos,
-    //   moves: const IListConst([]),
-    //   variant: Variant.chess,
-    //   limit: SearchLimit.depth(_eloToDepth(prefs.elo)),
-    //   multiPv: prefs.arrowCount,
-    //   game: 'assistant',
-    // ));
-    //
-    // _infoSub = _currentSearch!.infos.listen(_onInfo);
+    try {
+      final spec = prefs.useMaia ? const Lc0Spec() : const StockfishSpec.light();
+      final engine = await _ref.read(engineProvider(spec).future);
+
+      if (!_ref.mounted) return;
+
+      _currentSearch = engine.search(
+        SearchRequest(
+          initialPosition: pos,
+          moves: const IListConst([]),
+          variant: Variant.chess,
+          limit: SearchLimit.depth(_eloToDepth(prefs.elo)),
+          multiPv: prefs.arrowCount,
+          game: 'assistant',
+        ),
+      );
+
+      _infoSub = _currentSearch!.infos.listen(_onInfo);
+    } catch (e) {
+      // Engine failed to start; leave state empty.
+    }
   }
 
   void _onInfo(UciInfo info) {
-    // Convert the top PVs into Shape arrows.
-    // Example (you will adapt to the real PV format):
-    //
-    // final shapes = <Shape>{};
-    // for (final move in info.pv.take(3)) {
-    //   final normal = NormalMove.fromUci(move);
-    //   shapes.add(Arrow(
-    //     color: ShapeColor.green,
-    //     orig: normal.from,
-    //     dest: normal.to,
-    //   ));
-    // }
-    // state = state.copyWith(shapes: shapes);
+    final shapes = <Shape>{};
+    Move? best;
+
+    // info.pv contains UCI strings; take up to arrowCount.
+    final count = _ref.read(assistantPreferencesProvider).arrowCount;
+    for (final uci in info.pv.take(count)) {
+      final move = Move.fromUci(uci);
+      if (move is NormalMove) {
+        shapes.add(
+          Arrow(
+            color: best == null ? ShapeColor.green : ShapeColor.blue,
+            orig: move.from,
+            dest: move.to,
+          ),
+        );
+        best ??= move;
+      }
+    }
+
+    final eval = info.mate != null
+        ? (info.mate! > 0 ? 10.0 : -10.0)
+        : (info.cp ?? 0) / 100.0;
+
+    state = state.copyWith(
+      shapes: shapes,
+      bestMove: best,
+      eval: eval,
+    );
   }
 
   int _eloToDepth(int elo) {
