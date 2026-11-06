@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
@@ -54,6 +55,10 @@ class AssistantController extends StateNotifier<AssistantState> {
   Side? _userSide;
   Search? _currentSearch;
   StreamSubscription<UciInfo>? _infoSub;
+  Timer? _autoPlayTimer;
+
+  /// Optional callback used by live games to actually play the move.
+  void Function(Move)? onAutoPlay;
 
   /// Call this from the game / analysis screen whenever the position or side-to-move changes.
   void updatePosition({
@@ -69,6 +74,7 @@ class AssistantController extends StateNotifier<AssistantState> {
   Future<void> _restartSearch() async {
     _currentSearch?.stop();
     _infoSub?.cancel();
+    _autoPlayTimer?.cancel();
     state = const AssistantState();
 
     final prefs = _ref.read(assistantPreferencesProvider);
@@ -105,7 +111,6 @@ class AssistantController extends StateNotifier<AssistantState> {
     final shapes = <Shape>{};
     Move? best;
 
-    // info.pv contains UCI strings; take up to arrowCount.
     final count = _ref.read(assistantPreferencesProvider).arrowCount;
     for (final uci in info.pv.take(count)) {
       final move = Move.fromUci(uci);
@@ -130,6 +135,19 @@ class AssistantController extends StateNotifier<AssistantState> {
       bestMove: best,
       eval: eval,
     );
+
+    // Auto-play with jitter once we have a best move
+    final prefs = _ref.read(assistantPreferencesProvider);
+    if (prefs.autoPlay && best != null && onAutoPlay != null) {
+      _autoPlayTimer?.cancel();
+      final jitter = Random().nextDouble() * 0.4; // ±0.2s
+      final delay = prefs.autoPlayDelay + jitter;
+      _autoPlayTimer = Timer(Duration(milliseconds: (delay * 1000).round()), () {
+        if (state.bestMove != null && onAutoPlay != null) {
+          onAutoPlay!(state.bestMove!);
+        }
+      });
+    }
   }
 
   int _eloToDepth(int elo) {
@@ -146,6 +164,7 @@ class AssistantController extends StateNotifier<AssistantState> {
   void dispose() {
     _currentSearch?.stop();
     _infoSub?.cancel();
+    _autoPlayTimer?.cancel();
     _prefsSub.close();
     super.dispose();
   }
