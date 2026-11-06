@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lichess_mobile/src/constants.dart';
 import 'package:lichess_mobile/src/model/analysis/common_analysis_prefs.dart';
 import 'package:lichess_mobile/src/model/analysis/common_analysis_state.dart';
+import 'package:lichess_mobile/src/model/assistant/assistant_controller.dart';
 import 'package:lichess_mobile/src/model/common/chess.dart';
 import 'package:lichess_mobile/src/model/common/eval.dart';
 import 'package:lichess_mobile/src/model/engine/engine_utils.dart';
@@ -16,6 +17,7 @@ import 'package:lichess_mobile/src/model/settings/board_preferences.dart';
 import 'package:lichess_mobile/src/styles/lichess_colors.dart';
 import 'package:lichess_mobile/src/view/analysis/game_analysis_board.dart';
 import 'package:lichess_mobile/src/view/analysis/retro_screen.dart';
+import 'package:lichess_mobile/src/view/assistant/assistant_settings_sheet.dart';
 import 'package:lichess_mobile/src/view/broadcast/broadcast_game_screen.dart';
 import 'package:lichess_mobile/src/view/study/study_screen.dart';
 import 'package:lichess_mobile/src/widgets/board.dart';
@@ -229,6 +231,20 @@ abstract class AnalysisBoardState<
     return bestMoveShapes.toSet();
   }
 
+  Set<Shape> _assistantShapes() {
+    final position = analysisState.currentPosition;
+    if (position == null) return {};
+
+    // Feed current position to the assistant (user side = side to move in analysis).
+    ref.read(assistantControllerProvider.notifier).updatePosition(
+      position: position,
+      userSide: position.turn,
+    );
+
+    final assistant = ref.watch(assistantControllerProvider);
+    return assistant.shapes;
+  }
+
   @override
   Widget build(BuildContext context) {
     final boardPrefs = ref.watch(boardPreferencesProvider);
@@ -237,7 +253,11 @@ abstract class AnalysisBoardState<
     final annotation = showAnnotations ? makeAnnotation(currentNode.nags) : null;
     final sanMove = currentNode.sanMove;
 
-    final externalShapes = {..._bestMoveShapes(boardPrefs.pieceSet.assets), ...extraShapes.unlock};
+    final externalShapes = {
+      ..._bestMoveShapes(boardPrefs.pieceSet.assets),
+      ..._assistantShapes(),
+      ...extraShapes.unlock,
+    };
     final boardAnnotations = sanMove != null && annotation != null
         ? (sanMove.isCastles && altCastles.containsKey(sanMove.move.uci)
               ? {Move.parse(altCastles[sanMove.move.uci]!)!.to: annotation}
@@ -265,23 +285,36 @@ abstract class AnalysisBoardState<
       );
     }
 
-    return BoardWidget(
-      size: widget.boardSize,
-      orientation: analysisState.pov,
-      controller: ctrl,
-      onMove: (move, {viaDragAndDrop}) => onUserMove(move),
-      shapes: externalShapes,
-      settings: boardPrefs
-          .toBoardSettings(analysisState.variant, appBrightness: Theme.of(context).brightness)
-          .copyWith(
-            borderRadius: widget.boardRadius,
-            boxShadow: widget.boardRadius != null ? boardShadows : const <BoxShadow>[],
-            drawShape: DrawShapeOptions(
-              enable: boardPrefs.enableShapeDrawings,
-              newShapeColor: boardPrefs.shapeColor.color,
-            ),
+    return Stack(
+      children: [
+        BoardWidget(
+          size: widget.boardSize,
+          orientation: analysisState.pov,
+          controller: ctrl,
+          onMove: (move, {viaDragAndDrop}) => onUserMove(move),
+          shapes: externalShapes,
+          settings: boardPrefs
+              .toBoardSettings(analysisState.variant, appBrightness: Theme.of(context).brightness)
+              .copyWith(
+                borderRadius: widget.boardRadius,
+                boxShadow: widget.boardRadius != null ? boardShadows : const <BoxShadow>[],
+                drawShape: DrawShapeOptions(
+                  enable: boardPrefs.enableShapeDrawings,
+                  newShapeColor: boardPrefs.shapeColor.color,
+                ),
+              ),
+          annotations: boardAnnotations,
+        ),
+        Positioned(
+          right: 8,
+          bottom: 8,
+          child: FloatingActionButton.small(
+            heroTag: 'assistant_settings',
+            onPressed: () => showAssistantSettings(context, ref),
+            child: const Icon(Icons.smart_toy),
           ),
-      annotations: boardAnnotations,
+        ),
+      ],
     );
   }
 }
