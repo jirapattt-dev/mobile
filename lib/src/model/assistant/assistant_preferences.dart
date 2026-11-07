@@ -10,7 +10,8 @@ final assistantPreferencesProvider =
   AssistantPreferencesNotifier.new,
 );
 
-class AssistantPreferencesNotifier extends Notifier<AssistantPreferences>
+class AssistantPreferencesNotifier()
+    extends Notifier<AssistantPreferences>
     with PreferencesStorage<AssistantPreferences> {
   @override
   AssistantPreferences build() => fetch();
