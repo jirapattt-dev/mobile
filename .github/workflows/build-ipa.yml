@@ -27,7 +27,13 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Build iOS (no codesign)
-        run: flutter build ios --no-codesign --release
+        run: |
+          flutter build ios --no-codesign --release \
+            --dart-define=LICHESS_HOST=lichess.org \
+            --dart-define=LICHESS_WS_HOST=socket.lichess.org \
+            --dart-define=LICHESS_CDN_HOST=https://lichess.org \
+            --dart-define=LICHESS_OPENING_EXPLORER_HOST=explorer.lichess.org \
+            --dart-define=LICHESS_TABLEBASE_HOST=tablebase.lichess.org
 
       - name: Package unsigned IPA
         run: |
