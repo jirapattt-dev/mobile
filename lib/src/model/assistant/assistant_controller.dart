@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lichess_mobile/src/model/assistant/assistant_preferences.dart';
 import 'package:lichess_mobile/src/model/common/chess.dart';
@@ -12,9 +13,7 @@ import 'package:lichess_mobile/src/model/engine/engine_providers.dart';
 import 'package:lichess_mobile/src/model/engine/engine_spec.dart';
 
 final assistantControllerProvider =
-    NotifierProvider.autoDispose<AssistantController, AssistantState>(
-  AssistantController.new,
-);
+    NotifierProvider<AssistantController, AssistantState>(AssistantController.new);
 
 class AssistantState {
   const AssistantState({
@@ -40,7 +39,7 @@ class AssistantState {
   }
 }
 
-class AssistantController extends AutoDisposeNotifier<AssistantState> {
+class AssistantController() extends Notifier<AssistantState> {
   Position? _currentPosition;
   Side? _userSide;
   Search? _currentSearch;
@@ -93,7 +92,7 @@ class AssistantController extends AutoDisposeNotifier<AssistantState> {
         SearchRequest(
           initialPosition: pos,
           moves: const IListConst([]),
-          variant: Variant.chess,
+          variant: Variant.standard,
           limit: SearchLimit.depth(_eloToDepth(prefs.elo)),
           multiPv: prefs.arrowCount,
           game: 'assistant',
@@ -112,11 +111,11 @@ class AssistantController extends AutoDisposeNotifier<AssistantState> {
 
     final count = ref.read(assistantPreferencesProvider).arrowCount;
     for (final uci in info.pv.take(count)) {
-      final move = Move.fromUci(uci);
+      final move = Move.parse(uci);
       if (move is NormalMove) {
         shapes.add(
           Arrow(
-            color: best == null ? ShapeColor.green : ShapeColor.blue,
+            color: best == null ? const Color(0xFF00AA00) : const Color(0xFF0066CC),
             orig: move.from,
             dest: move.to,
           ),
