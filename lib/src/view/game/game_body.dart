@@ -4,6 +4,7 @@ import 'package:chessground/chessground.dart';
 import 'package:collection/collection.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lichess_mobile/src/model/account/account_preferences.dart';
 import 'package:lichess_mobile/src/model/account/account_repository.dart';
@@ -449,7 +450,7 @@ class _PlayableGameBoardState() extends ConsumerState<_PlayableGameBoard> {
             enablePremoves: shell.canPremove && boardPrefs.premoves,
           ),
           orientation: orientation,
-          shapes: assistantShapes.toISet(),
+          shapes: ISet(assistantShapes),
           topTable: _GamePlayerTable(
             gameId: widget.gameId,
             side: topSide,
