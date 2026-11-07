@@ -17,7 +17,7 @@ class AssistantPreferencesNotifier()
   AssistantPreferences build() => fetch();
 
   @override
-  String get storageKey => 'assistant_preferences';
+  PrefCategory get prefCategory => PrefCategory.engineEvaluation;
 
   @override
   AssistantPreferences fromJson(Map<String, dynamic> json) =>
@@ -38,7 +38,7 @@ class AssistantPreferencesNotifier()
 }
 
 @Freezed(fromJson: true, toJson: true)
-sealed class const AssistantPreferences._() with _$AssistantPreferences {
+sealed class const AssistantPreferences._() with _$AssistantPreferences implements Serializable {
   const factory({
     @Default(true) bool enabled,
     @Default(1200) int elo,
