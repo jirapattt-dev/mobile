@@ -1,13 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
-const kLichessHost = String.fromEnvironment('LICHESS_HOST', defaultValue: 'lichess.dev');
+const kLichessHost = String.fromEnvironment('LICHESS_HOST', defaultValue: 'lichess.org');
 
 const kLichessWSHost = String.fromEnvironment(
   'LICHESS_WS_HOST',
-  defaultValue: 'socket.lichess.dev',
+  defaultValue: 'socket.lichess.org',
 );
 
+// Production WS secret is not public. Authenticated WebSocket (live games)
+// requires the real secret. Anonymous and most other features work without it.
 const kLichessWSSecret = String.fromEnvironment(
   'LICHESS_WS_SECRET',
   defaultValue: 'somethingElseInProd',
